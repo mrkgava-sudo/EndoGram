@@ -183,7 +183,7 @@ struct MainTabView: View {
     @StateObject private var store = LocalMessengerStore()
     var body: some View {
         TabView {
-            ChatsView()
+            ContactsView()
                 .tabItem { Label("Контакты", systemImage: "person.crop.circle") }
             CallsView()
                 .tabItem { Label("Звонки", systemImage: "phone") }

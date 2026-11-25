@@ -454,7 +454,8 @@ struct ContactsView: View {
     @EnvironmentObject private var store: LocalMessengerStore
     @State private var search = ""
     @State private var showAdd = false
-    @State private var selectedChat: UUID?\n    @State private var isShowingChat = false
+    @State private var selectedChat: UUID?
+    @State private var isShowingChat = false
 
     private var filtered: [EGContact] {
         store.contacts.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.username.localizedCaseInsensitiveContains(search) }
@@ -485,7 +486,8 @@ struct ContactsView: View {
             .searchable(text: $search, prompt: "Поиск контактов")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showAdd = true } label: { Image(systemName: "plus") } } }
             .sheet(isPresented: $showAdd) { AddContactView() }
-            .navigationDestination(isPresented: $isShowingChat) {\n                if let selectedChat { ConversationView(chatID: selectedChat) }\n            }
+            .navigationDestination(isPresented: $isShowingChat) {
+                if let selectedChat { ConversationView(chatID: selectedChat) }\n            }
         }
     }
 }

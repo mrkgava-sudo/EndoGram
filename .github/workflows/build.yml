@@ -6,10 +6,11 @@ on:
       - main
   workflow_dispatch:
 
-# Keep only the newest build; old queued builds must not block new commits.
+# Serialize IPA builds without killing a build that has already started.
+# A newer pending commit may replace an older pending run, but active builds continue.
 concurrency:
   group: endogram-ipa-build
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read

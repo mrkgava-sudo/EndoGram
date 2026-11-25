@@ -213,7 +213,7 @@ struct ConversationView: View {
         .navigationTitle(chat.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
                 Button {} label: { Image(systemName: "ellipsis").foregroundStyle(EG.blue) }
             }
         }
@@ -264,7 +264,7 @@ struct ContactsView: View {
             .searchable(text: $search, prompt: "Поиск контактов")
             .navigationTitle("Контакты")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button {} label: { Image(systemName: "plus").font(.system(size: 18, weight: .medium)) }
                 }
             }

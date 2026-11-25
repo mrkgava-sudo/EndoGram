@@ -6,12 +6,18 @@ on:
       - main
   workflow_dispatch:
 
+# Keep only the newest build; old queued builds must not block new commits.
+concurrency:
+  group: endogram-ipa-build
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 35
     steps:
       - name: Checkout source
         uses: actions/checkout@v4

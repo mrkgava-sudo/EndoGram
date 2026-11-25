@@ -487,7 +487,8 @@ struct ContactsView: View {
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showAdd = true } label: { Image(systemName: "plus") } } }
             .sheet(isPresented: $showAdd) { AddContactView() }
             .navigationDestination(isPresented: $isShowingChat) {
-                if let selectedChat { ConversationView(chatID: selectedChat) }\n            }
+                if let selectedChat { ConversationView(chatID: selectedChat) }
+            }
         }
     }
 }

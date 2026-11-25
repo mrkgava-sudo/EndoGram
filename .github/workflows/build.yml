@@ -2,7 +2,8 @@ name: Build EndoGram IPA
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -12,19 +13,19 @@ jobs:
   build:
     runs-on: macos-15
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+      - name: Show Xcode version
+        run: xcodebuild -version
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
-      - name: Generate Xcode project
+      - name: Generate project
         run: xcodegen generate
 
-      - name: Build unsigned app
+      - name: Compile for iPhone
         run: |
           xcodebuild \
             -project EndoGram.xcodeproj \
@@ -36,14 +37,17 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Package IPA
+      - name: Package unsigned IPA
         run: |
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/EndoGram.app"
+          test -d "$APP_PATH"
           mkdir -p build/Payload
-          cp -R build/DerivedData/Build/Products/Release-iphoneos/EndoGram.app build/Payload/
+          cp -R "$APP_PATH" build/Payload/
           cd build
-          zip -r EndoGram.ipa Payload
+          /usr/bin/zip -qry EndoGram.ipa Payload
+          test -s EndoGram.ipa
 
-      - name: Upload IPA artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: EndoGram-unsigned-IPA

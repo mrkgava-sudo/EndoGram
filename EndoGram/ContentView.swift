@@ -454,7 +454,7 @@ struct ContactsView: View {
     @EnvironmentObject private var store: LocalMessengerStore
     @State private var search = ""
     @State private var showAdd = false
-    @State private var selectedChat: UUID?
+    @State private var selectedChat: UUID?\n    @State private var isShowingChat = false
 
     private var filtered: [EGContact] {
         store.contacts.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) || $0.username.localizedCaseInsensitiveContains(search) }
@@ -468,7 +468,7 @@ struct ContactsView: View {
                 }
                 Section("Контакты") {
                     ForEach(filtered) { contact in
-                        Button { selectedChat = store.openChat(with: contact) } label: {
+                        Button { selectedChat = store.openChat(with: contact); isShowingChat = true } label: {
                             HStack(spacing: 12) {
                                 AvatarView(value: contact.avatar, color: contact.color, size: 46)
                                 VStack(alignment: .leading, spacing: 3) {
@@ -485,7 +485,7 @@ struct ContactsView: View {
             .searchable(text: $search, prompt: "Поиск контактов")
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button { showAdd = true } label: { Image(systemName: "plus") } } }
             .sheet(isPresented: $showAdd) { AddContactView() }
-            .navigationDestination(item: $selectedChat) { id in ConversationView(chatID: id) }
+            .navigationDestination(isPresented: $isShowingChat) {\n                if let selectedChat { ConversationView(chatID: selectedChat) }\n            }
         }
     }
 }

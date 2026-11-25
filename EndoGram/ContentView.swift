@@ -294,6 +294,17 @@ struct SettingsView: View {
                     .padding(.vertical, 6)
                 }
                 Section {
+                    NavigationLink { PremiumHubView() } label: {
+                        settingsRow("EndoGram Premium", icon: "star.circle.fill", color: .purple)
+                    }
+                    NavigationLink { StarsHubView() } label: {
+                        settingsRow("Мои звёзды", icon: "star.fill", color: Color(red: 0.96, green: 0.66, blue: 0.18))
+                    }
+                    NavigationLink { GiftsHubView() } label: {
+                        settingsRow("Подарки", icon: "gift.fill", color: .pink)
+                    }
+                }
+                Section {
                     settingsRow("Уведомления", icon: "bell.badge", color: .red)
                     settingsRow("Конфиденциальность", icon: "lock", color: .blue)
                     settingsRow("Данные и память", icon: "externaldrive", color: .green)

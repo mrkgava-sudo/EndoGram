@@ -184,9 +184,11 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             ChatsView()
-                .tabItem { Label("Чаты", systemImage: "bubble.left.and.bubble.right.fill") }
-            ContactsView()
                 .tabItem { Label("Контакты", systemImage: "person.crop.circle") }
+            CallsView()
+                .tabItem { Label("Звонки", systemImage: "phone") }
+            ChatsView()
+                .tabItem { Label("Чаты", systemImage: "bubble.left.and.bubble.right.fill") }
             SettingsView()
                 .tabItem { Label("Настройки", systemImage: "gearshape") }
         }
@@ -203,6 +205,7 @@ struct ChatsView: View {
     @State private var folder = "Все"
     @State private var showNewMessage = false
     @State private var showArchive = false
+    @State private var showSideMenu = false
 
     private let folders = ["Все", "Личные", "Группы"]
 
@@ -217,6 +220,7 @@ struct ChatsView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                StoriesStrip()
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 9) {
                         ForEach(folders, id: \.self) { item in
@@ -261,13 +265,14 @@ struct ChatsView: View {
             .searchable(text: $search, prompt: "Поиск")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {} label: { Image(systemName: "line.3.horizontal").font(.system(size: 18)) }
+                    Button { showSideMenu = true } label: { Image(systemName: "line.3.horizontal").font(.system(size: 18, weight: .medium)) }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showNewMessage = true } label: { Image(systemName: "square.and.pencil").font(.system(size: 19)) }
                 }
             }
             .sheet(isPresented: $showNewMessage) { NewMessageView() }
+            .sheet(isPresented: $showSideMenu) { EndoSideMenu() }
             .navigationDestination(isPresented: $showArchive) { ArchiveView() }
         }
     }
@@ -349,7 +354,17 @@ struct ConversationView: View {
                             }
                         }.padding(12)
                     }
-                    .background(Color(red: 0.91, green: 0.93, blue: 0.94))
+                    .background {
+                        ZStack {
+                            Color(red: 0.91, green: 0.93, blue: 0.94)
+                            Image(systemName: "paperplane.fill")
+                                .font(.system(size: 190, weight: .ultraLight))
+                                .foregroundStyle(EGTheme.blue.opacity(0.035))
+                                .rotationEffect(.degrees(-24))
+                                .offset(x: 90, y: 130)
+                        }
+                        .ignoresSafeArea()
+                    }
                     .onChange(of: chat.messages.count) { _ in
                         if let last = chat.messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
                     }
@@ -686,5 +701,138 @@ private struct EGEmptyState: View {
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+
+// MARK: - Telegram-inspired local interface details
+
+private struct StoriesStrip: View {
+    private let stories: [(String, String, String, Bool)] = [
+        ("Моя история", "plus", "blue", false),
+        ("Александр", "А", "orange", true),
+        ("Мария", "М", "purple", true),
+        ("Илья", "И", "green", true),
+        ("Дизайн", "D", "pink", true),
+        ("Команда", "К", "indigo", true)
+    ]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 15) {
+                ForEach(Array(stories.enumerated()), id: \.offset) { index, story in
+                    VStack(spacing: 5) {
+                        ZStack(alignment: .bottomTrailing) {
+                            Circle()
+                                .strokeBorder(story.3 ? EGTheme.blue : EGTheme.line, lineWidth: story.3 ? 2.5 : 1)
+                                .frame(width: 62, height: 62)
+                                .overlay {
+                                    Circle().fill(EGTheme.color(story.2).gradient).padding(4)
+                                        .overlay {
+                                            if index == 0 {
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 23)).foregroundStyle(.white)
+                                            } else {
+                                                Text(story.1).font(.system(size: 22, weight: .semibold)).foregroundStyle(.white)
+                                            }
+                                        }
+                                }
+                            if index == 0 {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 20)).symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white, EGTheme.blue)
+                                    .background(.white, in: Circle())
+                            }
+                        }
+                        Text(story.0).font(.system(size: 11)).foregroundStyle(.primary).lineLimit(1)
+                    }
+                    .frame(width: 68)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 8)
+            .padding(.bottom, 9)
+        }
+        .background(.background)
+    }
+}
+
+private struct EndoSideMenu: View {
+    @EnvironmentObject private var store: LocalMessengerStore
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        AvatarView(value: String(store.displayName.prefix(1)), color: "blue", size: 68)
+                        Text(store.displayName).font(.system(size: 19, weight: .bold))
+                        Text("@\(store.username)").font(.system(size: 13)).foregroundStyle(EGTheme.muted)
+                        Text(store.bio).font(.system(size: 13)).foregroundStyle(EGTheme.muted)
+                    }
+                    .padding(.vertical, 10)
+                }
+                Section {
+                    NavigationLink { ProfileView() } label: { Label("Мой профиль", systemImage: "person.crop.circle") }
+                    NavigationLink { ArchiveView() } label: { Label("Архив чатов", systemImage: "archivebox") }
+                    NavigationLink { CallsView() } label: { Label("Звонки", systemImage: "phone") }
+                }
+                Section("EndoGram") {
+                    NavigationLink { PremiumHubView() } label: { Label("Premium", systemImage: "star.circle.fill") }
+                    NavigationLink { StarsHubView() } label: { Label("Звёзды", systemImage: "star.fill") }
+                    NavigationLink { GiftsHubView() } label: { Label("Подарки", systemImage: "gift.fill") }
+                    NavigationLink { SimpleSettingsPage(title: "О приложении", subtitle: "EndoGram — самостоятельный офлайн-мессенджер. Сетевые функции пока не подключены.") } label: { Label("О приложении", systemImage: "info.circle") }
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Меню")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Готово") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+struct CallsView: View {
+    @State private var search = ""
+    private let calls: [(String, String, String, String)] = [
+        ("Александр", "Сегодня, 14:32", "phone.arrow.up.right", "orange"),
+        ("Мария", "Вчера, 19:08", "phone.arrow.down.left", "purple"),
+        ("Илья", "Понедельник, 11:46", "phone.arrow.up.right", "green")
+    ]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(calls.filter { search.isEmpty || $0.0.localizedCaseInsensitiveContains(search) }, id: \.0) { call in
+                        HStack(spacing: 12) {
+                            AvatarView(value: String(call.0.prefix(1)), color: call.3, size: 50)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(call.0).font(.system(size: 16, weight: .semibold))
+                                Text(call.1).font(.system(size: 13)).foregroundStyle(EGTheme.muted)
+                            }
+                            Spacer()
+                            Image(systemName: call.2).foregroundStyle(EGTheme.blue)
+                            Button {} label: { Image(systemName: "phone.fill").foregroundStyle(EGTheme.blue) }
+                        }
+                        .padding(.vertical, 3)
+                    }
+                }
+                Section {
+                    Text("История звонков хранится только в демонстрационном интерфейсе. Аудио- и видеосвязь пока не подключены.")
+                        .font(.system(size: 13)).foregroundStyle(EGTheme.muted)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Звонки")
+            .searchable(text: $search, prompt: "Поиск")
+        }
     }
 }

@@ -26,7 +26,7 @@ struct MainTabView: View {
     }
 }
 
-private struct Chat: Identifiable {
+struct Chat: Identifiable {
     let id = UUID()
     let name: String
     let message: String
@@ -93,13 +93,13 @@ struct ChatsView: View {
             .searchable(text: $search, prompt: "Поиск")
             .navigationTitle("EndoGram")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button {} label: {
                         Image(systemName: "line.3.horizontal")
                             .font(.system(size: 18, weight: .medium))
                     }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button { showingCompose = true } label: {
                         Image(systemName: "square.and.pencil")
                             .font(.system(size: 19, weight: .medium))
@@ -109,8 +109,8 @@ struct ChatsView: View {
             .sheet(isPresented: $showingCompose) {
                 NewMessageView()
             }
-            .navigationDestination(item: $selectedChat) { chat in
-                ConversationView(chat: chat)
+            .sheet(item: $selectedChat) { chat in
+                NavigationStack { ConversationView(chat: chat) }
             }
         }
     }

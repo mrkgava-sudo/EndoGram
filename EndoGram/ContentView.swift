@@ -253,7 +253,7 @@ struct ChatsView: View {
                 .listStyle(.plain)
                 .overlay {
                     if visibleChats.isEmpty {
-                        ContentUnavailableView("Чатов пока нет", systemImage: "bubble.left.and.bubble.right", description: Text("Создайте переписку через кнопку нового сообщения."))
+                        EGEmptyState(title: "Чатов пока нет", symbol: "bubble.left.and.bubble.right", subtitle: "Создайте переписку через кнопку нового сообщения.")
                     }
                 }
             }
@@ -319,7 +319,7 @@ struct ArchiveView: View {
         .listStyle(.plain)
         .navigationTitle("Архив")
         .overlay {
-            if store.archivedChats.isEmpty { ContentUnavailableView("Архив пуст", systemImage: "archivebox") }
+            if store.archivedChats.isEmpty { EGEmptyState(title: "Архив пуст", symbol: "archivebox", subtitle: "Перемещённые чаты появятся здесь.") }
         }
     }
 }
@@ -356,7 +356,7 @@ struct ConversationView: View {
                 }
                 composer
             } else {
-                ContentUnavailableView("Чат не найден", systemImage: "bubble.left")
+                EGEmptyState(title: "Чат не найден", symbol: "bubble.left", subtitle: "Вернитесь к списку переписок.")
             }
         }
         .navigationTitle(chat?.title ?? "Чат")
@@ -667,5 +667,21 @@ private struct AvatarView: View {
                 }
             }
             .accessibilityLabel("Аватар")
+    }
+}
+
+
+private struct EGEmptyState: View {
+    let title: String
+    let symbol: String
+    let subtitle: String
+    var body: some View {
+        VStack(spacing: 9) {
+            Image(systemName: symbol).font(.system(size: 34)).foregroundStyle(EGTheme.muted)
+            Text(title).font(.system(size: 17, weight: .semibold))
+            Text(subtitle).font(.system(size: 13)).foregroundStyle(EGTheme.muted).multilineTextAlignment(.center)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

@@ -651,7 +651,7 @@ struct ProfileView: View {
                 LabeledContent("Создан", value: economy.account.createdAt.formatted(date: .abbreviated, time: .shortened))
                 LabeledContent("ID", value: String(economy.account.id.uuidString.prefix(8)))
                 if economy.hasPremium {
-                    Label("Premium активен до \\(economy.premiumUntil?.formatted(date: .abbreviated, time: .omitted) ?? "")", systemImage: "checkmark.seal.fill")
+                    Label("Premium активен до \(economy.premiumUntil?.formatted(date: .abbreviated, time: .omitted) ?? "")", systemImage: "checkmark.seal.fill")
                         .foregroundStyle(.purple)
                 } else {
                     Label("Обычный аккаунт", systemImage: "person.crop.circle")
@@ -660,8 +660,10 @@ struct ProfileView: View {
             }
             Section {
                 Button("Сохранить изменения") {
-                    economy.account.displayName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? economy.account.displayName : name
-                    economy.account.username = username.replacingOccurrences(of: "@", with: "")
+                    economy.updateAccount(
+                        displayName: name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? economy.account.displayName : name,
+                        username: username
+                    )
                     store.bio = bio
                 }
             }
@@ -1144,7 +1146,7 @@ private struct LocalCollectionView: View {
                             Text(item.symbol).font(.system(size: 32))
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(item.title).font(.system(size: 15, weight: .semibold))
-                                Text(item.isCollectible ? "NFT · \\(item.rarity)" : "Подарок · \\(item.rarity)")
+                                Text(item.isCollectible ? "NFT · \(item.rarity)" : "Подарок · \(item.rarity)")
                                     .font(.system(size: 12)).foregroundStyle(EGTheme.muted)
                             }
                         }
@@ -1169,9 +1171,9 @@ private struct LocalItemDetailView: View {
                 VStack(spacing: 12) {
                     Text(item.symbol).font(.system(size: 76))
                     Text(item.title).font(.system(size: 23, weight: .bold))
-                    Text(item.isCollectible ? "Локальный NFT · \\(item.rarity)" : "Подарок · \\(item.rarity)")
+                    Text(item.isCollectible ? "Локальный NFT · \(item.rarity)" : "Подарок · \(item.rarity)")
                         .font(.subheadline).foregroundStyle(EGTheme.muted)
-                    Text("Стоимость при покупке: \\(item.price) ⭐")
+                    Text("Стоимость при покупке: \(item.price) ⭐")
                         .font(.system(size: 14, weight: .semibold)).foregroundStyle(.orange)
                 }
                 .frame(maxWidth: .infinity)
@@ -1183,7 +1185,7 @@ private struct LocalItemDetailView: View {
                 LabeledContent("Формат", value: "Локальный предмет EndoGram")
             }
             Section {
-                Button("Улучшить за \\(max(100, item.price)) ⭐") {
+                Button("Улучшить за \(max(100, item.price)) ⭐") {
                     notice = economy.upgrade(inventoryIndex) ? "Предмет улучшен и сохранён" : "Недостаточно звёзд"
                 }
                 if !notice.isEmpty {

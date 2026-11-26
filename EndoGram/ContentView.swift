@@ -849,6 +849,13 @@ struct EGEconomyItem: Identifiable, Codable, Equatable {
     var isCollectible: Bool
 }
 
+struct EGLocalAccount: Codable, Equatable {
+    var id: UUID
+    var displayName: String
+    var username: String
+    var createdAt: Date
+}
+
 struct EGEconomyTransaction: Identifiable, Codable {
     var id = UUID()
     var title: String
@@ -859,11 +866,13 @@ struct EGEconomyTransaction: Identifiable, Codable {
 @MainActor
 final class LocalEconomyStore: ObservableObject {
     static let shared = LocalEconomyStore()
+    @Published private(set) var account: EGLocalAccount
     @Published private(set) var balance: Int
     @Published private(set) var inventory: [EGEconomyItem]
     @Published private(set) var transactions: [EGEconomyTransaction]
     @Published private(set) var premiumUntil: Date?
 
+    private let accountKey = "endogram.local.account.v1"
     private let balanceKey = "endogram.economy.balance.v1"
     private let inventoryKey = "endogram.economy.inventory.v1"
     private let transactionsKey = "endogram.economy.transactions.v1"
@@ -882,6 +891,14 @@ final class LocalEconomyStore: ObservableObject {
 
     private init() {
         let defaults = UserDefaults.standard
+        if let data = defaults.data(forKey: accountKey),
+           let savedAccount = try? JSONDecoder().decode(EGLocalAccount.self, from: data) {
+            account = savedAccount
+        } else {
+            let suffix = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).lowercased()
+            account = EGLocalAccount(id: UUID(), displayName: "Пользователь EndoGram", username: "endo_\(suffix)", createdAt: Date())
+            if let data = try? JSONEncoder().encode(account) { defaults.set(data, forKey: accountKey) }
+        }
         balance = defaults.object(forKey: balanceKey) as? Int ?? 1_000_000
         if let data = defaults.data(forKey: inventoryKey), let value = try? JSONDecoder().decode([EGEconomyItem].self, from: data) { inventory = value } else { inventory = [] }
         if let data = defaults.data(forKey: transactionsKey), let value = try? JSONDecoder().decode([EGEconomyTransaction].self, from: data) { transactions = value } else { transactions = [] }
@@ -890,11 +907,32 @@ final class LocalEconomyStore: ObservableObject {
 
     var hasPremium: Bool { premiumUntil.map { $0 > Date() } ?? false }
 
+    func updateAccount(displayName: String, username: String) {
+        let cleanName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "@", with: "")
+        guard !cleanName.isEmpty, !cleanUsername.isEmpty else { return }
+        account.displayName = cleanName
+        account.username = cleanUsername
+        persist()
+    }
+
+    @discardableResult
+    func credit(_ amount: Int, reason: String) -> Bool {
+        guard amount > 0, balance <= Int.max - amount else { return false }
+        balance += amount
+        transactions.insert(EGEconomyTransaction(title: reason, amount: amount), at: 0)
+        persist()
+        return true
+    }
+
     @discardableResult
     func purchase(_ item: EGEconomyItem) -> Bool {
         guard balance >= item.price else { return false }
         balance -= item.price
-        inventory.append(item)
+        var ownedItem = item
+        ownedItem.id = UUID().uuidString
+        inventory.append(ownedItem)
         transactions.insert(EGEconomyTransaction(title: "Покупка: \(item.title)", amount: -item.price), at: 0)
         persist()
         return true
@@ -904,7 +942,9 @@ final class LocalEconomyStore: ObservableObject {
     func giftToSelf(_ item: EGEconomyItem) -> Bool {
         guard balance >= item.price else { return false }
         balance -= item.price
-        inventory.append(item)
+        var ownedItem = item
+        ownedItem.id = UUID().uuidString
+        inventory.append(ownedItem)
         transactions.insert(EGEconomyTransaction(title: "Подарок самому себе: \(item.title)", amount: -item.price), at: 0)
         persist()
         return true
@@ -937,6 +977,7 @@ final class LocalEconomyStore: ObservableObject {
 
     private func persist() {
         let defaults = UserDefaults.standard
+        if let data = try? JSONEncoder().encode(account) { defaults.set(data, forKey: accountKey) }
         defaults.set(balance, forKey: balanceKey)
         if let data = try? JSONEncoder().encode(inventory) { defaults.set(data, forKey: inventoryKey) }
         if let data = try? JSONEncoder().encode(transactions) { defaults.set(data, forKey: transactionsKey) }
@@ -964,29 +1005,69 @@ private struct EconomyBalanceHeader: View {
 
 struct StarsHubView: View {
     @ObservedObject private var economy = LocalEconomyStore.shared
+
     var body: some View {
         List {
-            Section { EconomyBalanceHeader().listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
-            Section(header: Text("Последние операции")) {
-                if economy.transactions.isEmpty {
-                    Text("Операций пока нет").foregroundStyle(EGTheme.muted)
-                } else {
-                    ForEach(economy.transactions.prefix(30)) { tx in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(tx.title)
-                                Text(tx.date.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 11)).foregroundStyle(EGTheme.muted)
-                            }
-                            Spacer()
-                            Text("\(tx.amount) ⭐").font(.system(size: 14, weight: .semibold)).foregroundStyle(tx.amount < 0 ? .primary : .green)
-                        }
-                    }
-                }
-            }
-            Section { Text("Звёзды EndoGram — виртуальная внутренняя валюта. Все операции выполняются и сохраняются только на этом устройстве.").font(.footnote).foregroundStyle(EGTheme.muted) }
+            balanceSection
+            transactionsSection
+            testToolsSection
+            informationSection
         }
         .listStyle(.insetGrouped)
         .navigationTitle("Мои звёзды")
+    }
+
+    private var balanceSection: some View {
+        Section {
+            EconomyBalanceHeader()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+        }
+    }
+
+    private var transactionsSection: some View {
+        Section(header: Text("Последние операции")) {
+            if economy.transactions.isEmpty {
+                Text("Операций пока нет").foregroundStyle(EGTheme.muted)
+            } else {
+                ForEach(Array(economy.transactions.prefix(30))) { transaction in
+                    transactionRow(transaction)
+                }
+            }
+        }
+    }
+
+    private func transactionRow(_ transaction: EGEconomyTransaction) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(transaction.title)
+                Text(transaction.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 11))
+                    .foregroundStyle(EGTheme.muted)
+            }
+            Spacer()
+            Text("\(transaction.amount) ⭐")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(transaction.amount < 0 ? .primary : .green)
+        }
+    }
+
+    private var testToolsSection: some View {
+        Section("Тестовый режим") {
+            Button {
+                _ = economy.credit(100, reason: "Тестовое начисление")
+            } label: {
+                Label("Начислить 100 звёзд", systemImage: "plus.circle.fill")
+            }
+        }
+    }
+
+    private var informationSection: some View {
+        Section {
+            Text("Звёзды EndoGram — виртуальная внутренняя валюта. Все операции выполняются и сохраняются только на этом устройстве.")
+                .font(.footnote)
+                .foregroundStyle(EGTheme.muted)
+        }
     }
 }
 

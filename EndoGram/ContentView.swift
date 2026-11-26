@@ -967,7 +967,7 @@ struct StarsHubView: View {
     var body: some View {
         List {
             Section { EconomyBalanceHeader().listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
-            Section("Последние операции") {
+            Section(header: Text("Последние операции")) {
                 if economy.transactions.isEmpty {
                     Text("Операций пока нет").foregroundStyle(EGTheme.muted)
                 } else {

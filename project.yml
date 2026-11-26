@@ -14,6 +14,8 @@ targets:
     platform: iOS
     sources:
       - path: EndoGram
+        excludes:
+          - MonetizationViews.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.endogram.ios

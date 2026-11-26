@@ -705,7 +705,7 @@ private struct EGEmptyState: View {
 }
 
 
-// MARK: - Telegram-inspired local interface details
+// MARK: - EndoGram local interface details
 
 private struct StoriesStrip: View {
     private let stories: [(String, String, String, Bool)] = [

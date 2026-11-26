@@ -576,7 +576,7 @@ struct AddContactView: View {
 
 struct SettingsView: View {
     @EnvironmentObject private var store: LocalMessengerStore
-    @AppStorage("eg_demo_premium") private var premiumEnabled = false
+    @ObservedObject private var economy = LocalEconomyStore.shared
     @State private var notifications = true
     @State private var sounds = true
 
@@ -586,10 +586,10 @@ struct SettingsView: View {
                 Section {
                     NavigationLink { ProfileView() } label: {
                         HStack(spacing: 13) {
-                            AvatarView(value: String(store.displayName.prefix(1)), color: "blue", size: 60)
+                            AvatarView(value: String(economy.account.displayName.prefix(1)), color: "blue", size: 60)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(store.displayName).font(.system(size: 18, weight: .semibold))
-                                Text("@\(store.username)").font(.system(size: 14)).foregroundStyle(EGTheme.muted)
+                                Text(economy.account.displayName).font(.system(size: 18, weight: .semibold))
+                                Text("@\(economy.account.username)").font(.system(size: 14)).foregroundStyle(EGTheme.muted)
                                 Text("Изменить профиль").font(.system(size: 13)).foregroundStyle(EGTheme.blue)
                             }
                         }.padding(.vertical, 5)
@@ -631,6 +631,7 @@ struct SettingsView: View {
 
 struct ProfileView: View {
     @EnvironmentObject private var store: LocalMessengerStore
+    @ObservedObject private var economy = LocalEconomyStore.shared
     @State private var name = ""
     @State private var username = ""
     @State private var bio = ""
@@ -638,7 +639,7 @@ struct ProfileView: View {
     var body: some View {
         Form {
             Section {
-                AvatarView(value: String((name.isEmpty ? store.displayName : name).prefix(1)), color: "blue", size: 86)
+                AvatarView(value: String((name.isEmpty ? economy.account.displayName : name).prefix(1)), color: "blue", size: 86)
                     .frame(maxWidth: .infinity).padding(.vertical, 12)
             }
             Section("Данные") {
@@ -646,17 +647,28 @@ struct ProfileView: View {
                 TextField("Username", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
                 TextField("О себе", text: $bio)
             }
+            Section("Локальный аккаунт") {
+                LabeledContent("Создан", value: economy.account.createdAt.formatted(date: .abbreviated, time: .shortened))
+                LabeledContent("ID", value: String(economy.account.id.uuidString.prefix(8)))
+                if economy.hasPremium {
+                    Label("Premium активен до \\(economy.premiumUntil?.formatted(date: .abbreviated, time: .omitted) ?? "")", systemImage: "checkmark.seal.fill")
+                        .foregroundStyle(.purple)
+                } else {
+                    Label("Обычный аккаунт", systemImage: "person.crop.circle")
+                        .foregroundStyle(EGTheme.muted)
+                }
+            }
             Section {
                 Button("Сохранить изменения") {
-                    store.displayName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? store.displayName : name
-                    store.username = username.replacingOccurrences(of: "@", with: "")
+                    economy.account.displayName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? economy.account.displayName : name
+                    economy.account.username = username.replacingOccurrences(of: "@", with: "")
                     store.bio = bio
                 }
             }
         }
         .navigationTitle("Мой профиль")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { name = store.displayName; username = store.username; bio = store.bio }
+        .onAppear { name = economy.account.displayName; username = economy.account.username; bio = store.bio }
     }
 }
 
@@ -1125,21 +1137,66 @@ private struct LocalCollectionView: View {
                 Text("Коллекция пока пуста").foregroundStyle(EGTheme.muted)
             } else {
                 ForEach(Array(economy.inventory.enumerated()), id: \.offset) { index, item in
-                    HStack(spacing: 12) {
-                        Text(item.symbol).font(.system(size: 32))
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(item.title).font(.system(size: 15, weight: .semibold))
-                            Text(item.rarity).font(.system(size: 12)).foregroundStyle(EGTheme.muted)
+                    NavigationLink {
+                        LocalItemDetailView(item: item, inventoryIndex: index)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text(item.symbol).font(.system(size: 32))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.title).font(.system(size: 15, weight: .semibold))
+                                Text(item.isCollectible ? "NFT · \\(item.rarity)" : "Подарок · \\(item.rarity)")
+                                    .font(.system(size: 12)).foregroundStyle(EGTheme.muted)
+                            }
                         }
-                        Spacer()
-                        Button("Улучшить") { notice = economy.upgrade(index) ? "Предмет улучшен" : "Недостаточно звёзд" }
-                            .font(.system(size: 12, weight: .semibold))
                     }
                 }
             }
             if !notice.isEmpty { Text(notice).font(.footnote).foregroundStyle(EGTheme.blue) }
         }
         .navigationTitle("Моя коллекция")
+    }
+}
+
+private struct LocalItemDetailView: View {
+    @ObservedObject private var economy = LocalEconomyStore.shared
+    let item: EGEconomyItem
+    let inventoryIndex: Int
+    @State private var notice = ""
+
+    var body: some View {
+        List {
+            Section {
+                VStack(spacing: 12) {
+                    Text(item.symbol).font(.system(size: 76))
+                    Text(item.title).font(.system(size: 23, weight: .bold))
+                    Text(item.isCollectible ? "Локальный NFT · \\(item.rarity)" : "Подарок · \\(item.rarity)")
+                        .font(.subheadline).foregroundStyle(EGTheme.muted)
+                    Text("Стоимость при покупке: \\(item.price) ⭐")
+                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(.orange)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+            }
+            Section("Сведения") {
+                LabeledContent("Тип", value: item.isCollectible ? "Коллекционный NFT" : "Подарок")
+                LabeledContent("Редкость", value: item.rarity)
+                LabeledContent("Формат", value: "Локальный предмет EndoGram")
+            }
+            Section {
+                Button("Улучшить за \\(max(100, item.price)) ⭐") {
+                    notice = economy.upgrade(inventoryIndex) ? "Предмет улучшен и сохранён" : "Недостаточно звёзд"
+                }
+                if !notice.isEmpty {
+                    Text(notice).font(.footnote).foregroundStyle(EGTheme.blue)
+                }
+            }
+            Section {
+                Text("Это тестовый коллекционный объект, сохранённый на устройстве. Он не является блокчейн-активом и не имеет денежной стоимости.")
+                    .font(.footnote).foregroundStyle(EGTheme.muted)
+            }
+        }
+        .navigationTitle("Предмет")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

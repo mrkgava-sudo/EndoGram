@@ -836,3 +836,259 @@ struct CallsView: View {
         }
     }
 }
+
+
+// MARK: - Fully local Stars, Gifts, Collectibles and Premium economy
+
+struct EGEconomyItem: Identifiable, Codable, Equatable {
+    var id: String
+    var title: String
+    var symbol: String
+    var price: Int
+    var rarity: String
+    var isCollectible: Bool
+}
+
+struct EGEconomyTransaction: Identifiable, Codable {
+    var id = UUID()
+    var title: String
+    var amount: Int
+    var date = Date()
+}
+
+@MainActor
+final class LocalEconomyStore: ObservableObject {
+    static let shared = LocalEconomyStore()
+    @Published private(set) var balance: Int
+    @Published private(set) var inventory: [EGEconomyItem]
+    @Published private(set) var transactions: [EGEconomyTransaction]
+    @Published private(set) var premiumUntil: Date?
+
+    private let balanceKey = "endogram.economy.balance.v1"
+    private let inventoryKey = "endogram.economy.inventory.v1"
+    private let transactionsKey = "endogram.economy.transactions.v1"
+    private let premiumKey = "endogram.economy.premium.v1"
+
+    let catalog: [EGEconomyItem] = [
+        .init(id: "rose", title: "Роза", symbol: "🌹", price: 15, rarity: "Обычный", isCollectible: false),
+        .init(id: "heart", title: "Сердце", symbol: "💝", price: 25, rarity: "Обычный", isCollectible: false),
+        .init(id: "cake", title: "Торт", symbol: "🎂", price: 50, rarity: "Редкий", isCollectible: false),
+        .init(id: "trophy", title: "Кубок", symbol: "🏆", price: 120, rarity: "Редкий", isCollectible: true),
+        .init(id: "crystal", title: "Кристалл", symbol: "💎", price: 250, rarity: "Эпический", isCollectible: true),
+        .init(id: "crown", title: "Корона", symbol: "👑", price: 500, rarity: "Легендарный", isCollectible: true),
+        .init(id: "rocket", title: "Ракета", symbol: "🚀", price: 750, rarity: "Легендарный", isCollectible: true),
+        .init(id: "planet", title: "Планета", symbol: "🪐", price: 1200, rarity: "Мифический", isCollectible: true)
+    ]
+
+    private init() {
+        let defaults = UserDefaults.standard
+        balance = defaults.object(forKey: balanceKey) as? Int ?? 1_000_000
+        if let data = defaults.data(forKey: inventoryKey), let value = try? JSONDecoder().decode([EGEconomyItem].self, from: data) { inventory = value } else { inventory = [] }
+        if let data = defaults.data(forKey: transactionsKey), let value = try? JSONDecoder().decode([EGEconomyTransaction].self, from: data) { transactions = value } else { transactions = [] }
+        premiumUntil = defaults.object(forKey: premiumKey) as? Date
+    }
+
+    var hasPremium: Bool { premiumUntil.map { $0 > Date() } ?? false }
+
+    @discardableResult
+    func purchase(_ item: EGEconomyItem) -> Bool {
+        guard balance >= item.price else { return false }
+        balance -= item.price
+        inventory.append(item)
+        transactions.insert(EGEconomyTransaction(title: "Покупка: \(item.title)", amount: -item.price), at: 0)
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func giftToSelf(_ item: EGEconomyItem) -> Bool {
+        guard balance >= item.price else { return false }
+        balance -= item.price
+        inventory.append(item)
+        transactions.insert(EGEconomyTransaction(title: "Подарок самому себе: \(item.title)", amount: -item.price), at: 0)
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func upgrade(_ index: Int) -> Bool {
+        guard inventory.indices.contains(index) else { return false }
+        let cost = max(100, inventory[index].price)
+        guard balance >= cost else { return false }
+        balance -= cost
+        inventory[index].title += " · улучшен"
+        inventory[index].rarity = "Коллекционный"
+        transactions.insert(EGEconomyTransaction(title: "Улучшение: \(inventory[index].title)", amount: -cost), at: 0)
+        persist()
+        return true
+    }
+
+    @discardableResult
+    func activatePremium() -> Bool {
+        let price = 5000
+        guard balance >= price else { return false }
+        balance -= price
+        let start = max(Date(), premiumUntil ?? Date())
+        premiumUntil = Calendar.current.date(byAdding: .month, value: 1, to: start)
+        transactions.insert(EGEconomyTransaction(title: "EndoGram Premium · 1 месяц", amount: -price), at: 0)
+        persist()
+        return true
+    }
+
+    private func persist() {
+        let defaults = UserDefaults.standard
+        defaults.set(balance, forKey: balanceKey)
+        if let data = try? JSONEncoder().encode(inventory) { defaults.set(data, forKey: inventoryKey) }
+        if let data = try? JSONEncoder().encode(transactions) { defaults.set(data, forKey: transactionsKey) }
+        defaults.set(premiumUntil, forKey: premiumKey)
+    }
+}
+
+private struct EconomyBalanceHeader: View {
+    @ObservedObject var economy = LocalEconomyStore.shared
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "star.circle.fill").font(.system(size: 38)).foregroundStyle(.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Ваш баланс").font(.system(size: 12)).foregroundStyle(EGTheme.muted)
+                Text(economy.balance.formatted() + " ⭐").font(.system(size: 23, weight: .bold)).monospacedDigit()
+            }
+            Spacer()
+            Text("Локально").font(.system(size: 11, weight: .semibold)).foregroundStyle(EGTheme.blue)
+                .padding(.horizontal, 10).padding(.vertical, 6).background(EGTheme.blue.opacity(0.10), in: Capsule())
+        }
+        .padding(16)
+        .background(.background, in: RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+struct StarsHubView: View {
+    @ObservedObject private var economy = LocalEconomyStore.shared
+    var body: some View {
+        List {
+            Section { EconomyBalanceHeader().listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
+            Section("Последние операции") {
+                if economy.transactions.isEmpty {
+                    Text("Операций пока нет").foregroundStyle(EGTheme.muted)
+                } else {
+                    ForEach(economy.transactions.prefix(30)) { tx in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(tx.title)
+                                Text(tx.date.formatted(date: .abbreviated, time: .shortened)).font(.system(size: 11)).foregroundStyle(EGTheme.muted)
+                            }
+                            Spacer()
+                            Text("\(tx.amount) ⭐").font(.system(size: 14, weight: .semibold)).foregroundStyle(tx.amount < 0 ? .primary : .green)
+                        }
+                    }
+                }
+            }
+            Section { Text("Звёзды EndoGram — виртуальная внутренняя валюта. Все операции выполняются и сохраняются только на этом устройстве.").font(.footnote).foregroundStyle(EGTheme.muted) }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Мои звёзды")
+    }
+}
+
+struct GiftsHubView: View {
+    @ObservedObject private var economy = LocalEconomyStore.shared
+    @State private var showInventory = false
+    @State private var notice = ""
+    var body: some View {
+        List {
+            Section { EconomyBalanceHeader().listRowInsets(EdgeInsets()).listRowBackground(Color.clear) }
+            Section {
+                Button { showInventory = true } label: {
+                    Label("Моя коллекция (\(economy.inventory.count))", systemImage: "shippingbox")
+                }
+            }
+            Section("Магазин подарков и NFT") {
+                ForEach(economy.catalog) { item in
+                    HStack(spacing: 12) {
+                        Text(item.symbol).font(.system(size: 34)).frame(width: 48)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title).font(.system(size: 16, weight: .semibold))
+                            Text(item.isCollectible ? "NFT · \(item.rarity)" : "Подарок · \(item.rarity)")
+                                .font(.system(size: 12)).foregroundStyle(EGTheme.muted)
+                            Text("\(item.price) ⭐").font(.system(size: 13, weight: .semibold)).foregroundStyle(.orange)
+                        }
+                        Spacer()
+                        Menu {
+                            Button("Купить", systemImage: "cart") {
+                                notice = economy.purchase(item) ? "Покупка сохранена локально" : "Недостаточно звёзд"
+                            }
+                            Button("Подарить самому себе", systemImage: "gift") {
+                                notice = economy.giftToSelf(item) ? "Подарок добавлен в коллекцию" : "Недостаточно звёзд"
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle.fill").font(.system(size: 23)).foregroundStyle(EGTheme.blue)
+                        }
+                    }.padding(.vertical, 5)
+                }
+            }
+            if !notice.isEmpty { Section { Text(notice).font(.footnote).foregroundStyle(EGTheme.blue) } }
+            Section { Text("Каталог, покупки, NFT-коллекция и баланс пока полностью локальные. Это внутриигровые предметы EndoGram, не активы блокчейна.").font(.footnote).foregroundStyle(EGTheme.muted) } 
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Подарки")
+        .sheet(isPresented: $showInventory) { NavigationStack { LocalCollectionView().toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Готово") { showInventory = false } } } } }
+    }
+}
+
+private struct LocalCollectionView: View {
+    @ObservedObject private var economy = LocalEconomyStore.shared
+    @State private var notice = ""
+    var body: some View {
+        List {
+            if economy.inventory.isEmpty {
+                Text("Коллекция пока пуста").foregroundStyle(EGTheme.muted)
+            } else {
+                ForEach(Array(economy.inventory.enumerated()), id: \.offset) { index, item in
+                    HStack(spacing: 12) {
+                        Text(item.symbol).font(.system(size: 32))
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(item.title).font(.system(size: 15, weight: .semibold))
+                            Text(item.rarity).font(.system(size: 12)).foregroundStyle(EGTheme.muted)
+                        }
+                        Spacer()
+                        Button("Улучшить") { notice = economy.upgrade(index) ? "Предмет улучшен" : "Недостаточно звёзд" }
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                }
+            }
+            if !notice.isEmpty { Text(notice).font(.footnote).foregroundStyle(EGTheme.blue) }
+        }
+        .navigationTitle("Моя коллекция")
+    }
+}
+
+struct PremiumHubView: View {
+    @ObservedObject private var economy = LocalEconomyStore.shared
+    @State private var notice = ""
+    var body: some View {
+        List {
+            Section {
+                VStack(spacing: 12) {
+                    Image(systemName: "star.circle.fill").font(.system(size: 58)).foregroundStyle(.purple)
+                    Text("EndoGram Premium").font(.system(size: 23, weight: .bold))
+                    Text(economy.hasPremium ? "Подписка активна до \(economy.premiumUntil?.formatted(date: .abbreviated, time: .omitted) ?? "")" : "Больше возможностей в вашем локальном EndoGram")
+                        .font(.system(size: 13)).foregroundStyle(EGTheme.muted).multilineTextAlignment(.center)
+                    Text("5 000 ⭐ / месяц").font(.system(size: 18, weight: .bold)).foregroundStyle(.purple)
+                    Button(economy.hasPremium ? "Продлить на месяц" : "Подключить Premium") {
+                        notice = economy.activatePremium() ? "Premium активирован локально на месяц" : "Недостаточно звёзд"
+                    }
+                    .buttonStyle(.borderedProminent).tint(.purple)
+                    if !notice.isEmpty { Text(notice).font(.footnote).foregroundStyle(EGTheme.blue) }
+                }.frame(maxWidth: .infinity).padding(.vertical, 20)
+            }
+            Section("Преимущества") {
+                Label("Эксклюзивный значок Premium", systemImage: "checkmark.seal.fill")
+                Label("Особое оформление профиля", systemImage: "paintbrush.fill")
+                Label("Коллекционные значки", systemImage: "sparkles")
+            }
+            Section { Text("Premium — локальный демонстрационный статус, без реальных платежей и серверной проверки.").font(.footnote).foregroundStyle(EGTheme.muted) }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("Premium")
+    }
+}
